@@ -1,11 +1,10 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
-using System.Windows.Forms.Design;
 
 namespace PowerDimmer
 {
-    public partial class NotifyIconController
+    public class NotifyIconController
     {
         internal Action? ExitClicked;
         internal Action? MenuClosed;

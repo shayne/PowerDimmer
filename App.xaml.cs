@@ -73,7 +73,14 @@ namespace PowerDimmer
         // https://docs.microsoft.com/en-us/windows/win32/winauto/event-constants
         public void WinEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
         {
-            UpdateDimming(hwnd);
+            if (Win32.IsStandardWindow(hwnd) && Win32.HasNoVisibleOwner(hwnd))
+            {
+                UpdateDimming(hwnd);
+            }
+            else
+            {
+                Console.WriteLine("Not standard");
+            }
         }
 
         private void UpdateDimming(IntPtr fgHandle)
