@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Interop;
+using System.Windows.Forms;
 
 namespace PowerDimmer
 {
@@ -21,9 +22,14 @@ namespace PowerDimmer
         {
             InitializeComponent();
 
+            Width = SystemInformation.VirtualScreen.Width;
+            Height = SystemInformation.VirtualScreen.Height;
+
+            Console.WriteLine("Width: {0}, Height: {1}", Width, Height);
+
             brightness = _brightness;
 
-            var opacityBinding = new Binding(nameof(brightness.Value0));
+            var opacityBinding = new System.Windows.Data.Binding(nameof(brightness.Value0));
             opacityBinding.Mode = BindingMode.OneWay;
             opacityBinding.Source = brightness;
 
