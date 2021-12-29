@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - main
-      - workflow
     paths-ignore:
       - '**.md'
 jobs:
@@ -18,4 +17,14 @@ jobs:
     - uses: actions/setup-dotnet@v1
       with:
         dotnet-version: '6.0.x'
-    - run: dotnet build
+    - run: |
+        dotnet publish -o PowerDimmer
+        7z a -tzip "PowerDimmer.zip" "./PowerDimmer/*"
+        rm -r "PowerDimmer"
+    - uses: softprops/action-gh-release@v1
+      with:
+        prerelease: true
+        tag_name: ${{ github.ref_name }}
+        files: "PowerDimmer.zip"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
