@@ -1,5 +1,4 @@
-name: Main workflow
-
+name: Latest main build
 on:
   pull_request:
     paths-ignore:
