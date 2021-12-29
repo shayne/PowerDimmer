@@ -1,5 +1,7 @@
 # PowerDimmer
 
+[![Main workflow](https://github.com/shayne/PowerDimmer/actions/workflows/workflow.yml/badge.svg)](https://github.com/shayne/PowerDimmer/actions/workflows/workflow.yml)
+
 A simple distraction dimmer for Windows
 
 ## Features
