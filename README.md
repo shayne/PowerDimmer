@@ -4,6 +4,14 @@
 
 A simple distraction dimmer for Windows
 
+| [<img src="https://user-images.githubusercontent.com/79330/147771591-853256ae-f4f1-42d3-8c68-ea467febeb58.png" width="800" />](https://user-images.githubusercontent.com/79330/147771591-853256ae-f4f1-42d3-8c68-ea467febeb58.png) |
+| :--: |
+| *Dim everything but focused window* |
+
+| [<img src="https://user-images.githubusercontent.com/79330/147770555-5efe9efc-88e1-438e-a559-47b5f495976b.png" width="800" />](https://user-images.githubusercontent.com/79330/147770555-5efe9efc-88e1-438e-a559-47b5f495976b.png) |
+| :--: |
+| *Multiple focused windows via dimming toggle hotkey* |
+
 ## Features
 
 Initial Release
