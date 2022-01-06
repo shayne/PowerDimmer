@@ -11,7 +11,7 @@ namespace PowerDimmer
 {
     public partial class App : Application
     {
-        private DimWindow dimWin;
+        private List<DimWindow> dimWindows = new List<DimWindow>();
         private Win32.WinEventDelegate eventDelegate;
         private SortedSet<IntPtr> pinnedHandles = new SortedSet<IntPtr>();
         private Brightness brightness;
@@ -22,7 +22,13 @@ namespace PowerDimmer
             settings = new ConfigurationBuilder<ISettings>().UseJsonFile("settings.json").Build();
             brightness = new Brightness(settings.brightness);
             eventDelegate = new Win32.WinEventDelegate(WinEventProc);
-            dimWin = new DimWindow(brightness);
+            foreach (var screen in System.Windows.Forms.Screen.AllScreens)
+            {
+                var win = new DimWindow(brightness);
+                win.Left = screen.Bounds.Left;
+                win.Top = screen.Bounds.Top;
+                dimWindows.Add(win);
+            }
         }
 
         private void App_Startup(object sender, StartupEventArgs e)
@@ -58,7 +64,7 @@ namespace PowerDimmer
                 Console.WriteLine("count: {0}", pinnedHandles.Count);
             });
 
-            dimWin.Show();
+            dimWindows.ForEach(w => w.Show());
 
             eventDelegate = new Win32.WinEventDelegate(WinEventProc);
             IntPtr m_hhook = Win32.SetWinEventHook(Win32.EVENT_SYSTEM_FOREGROUND, Win32.EVENT_SYSTEM_FOREGROUND,
@@ -97,8 +103,11 @@ namespace PowerDimmer
                 // store the first pinned handle we didn't skip over
                 firstPinned ??= pinHandle;
             }
-            // Finally place the dimmer window behind the first pinned or foreground
-            Win32.SetWindowPos(dimWin.Handle, firstPinned ?? fgHandle, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+            foreach (var dimWin in dimWindows)
+            {
+                // Finally place the dimmer window behind the first pinned or foreground
+                Win32.SetWindowPos(dimWin.Handle, firstPinned ?? fgHandle, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+            }
         }
     }
 
