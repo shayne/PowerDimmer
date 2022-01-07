@@ -4,23 +4,28 @@ on:
     branches:
       - main
     paths-ignore:
-      - '**.md'
+      - "**.md"
 jobs:
   build:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-dotnet@v1
-      with:
-        dotnet-version: '6.0.x'
-    - run: |
-        dotnet publish -o PowerDimmer
-        7z a -tzip "PowerDimmer.zip" "./PowerDimmer/*"
-        rm -r "PowerDimmer"
-    - uses: softprops/action-gh-release@v1
-      with:
-        prerelease: true
-        tag_name: ${{ github.ref_name }}
-        files: "PowerDimmer.zip"
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v2
+      - uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: "6.0.x"
+      - run: |
+          dotnet publish -o PowerDimmer
+          7z a -tzip "PowerDimmer.zip" "./PowerDimmer/*"
+          rm -r "PowerDimmer"
+      - uses: richardsimko/update-tag@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ github.ref_name }}
+          files: "PowerDimmer.zip"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
