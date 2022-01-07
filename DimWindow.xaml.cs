@@ -23,7 +23,7 @@ namespace PowerDimmer
 
             brightness = _brightness;
 
-            var opacityBinding = new System.Windows.Data.Binding(nameof(brightness.Value0));
+            var opacityBinding = new Binding(nameof(brightness.Value0));
             opacityBinding.Mode = BindingMode.OneWay;
             opacityBinding.Source = brightness;
 
@@ -34,6 +34,8 @@ namespace PowerDimmer
         {
             base.OnActivated(e);
 
+            // Note: Moving this to the xaml or anywhere else
+            // causes the window to stay on the primary display.
             WindowState = WindowState.Maximized;
 
             var style = Win32.GetWindowLong(Handle, Win32.GWL_EXSTYLE);
