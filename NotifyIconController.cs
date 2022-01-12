@@ -2,34 +2,52 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
+using ModernNotifyIcon.Theme;
+using System.Collections.Generic;
+using System.Reflection;
+
 namespace PowerDimmer
 {
     public class NotifyIconController
     {
         internal Action? ExitClicked;
-        internal Action? MenuClosed;
         public NotifyIcon NotifyIcon;
 
-        public NotifyIconController(Brightness brightness)
+        public NotifyIconController(ISettings settings)
         {
-            NotifyIcon = new NotifyIcon();
+            NotifyIcon = NotifyIconBuilder
+                .Create()
+                .Configure(builder => builder
+                    .AddToggle(option => option
+                        .SetText("Dimming active?")
+                        .SetChecked(settings.ActiveOnLaunch)
+                        .ConfigureItem(item =>
+                        {
+                            item.ShortcutKeyDisplayString = "CTRL+WIN+ALT+D";
 
-            var contextMenu = new ContextMenuStrip();
-            contextMenu.Items.AddRange(
-                new ToolStripItem[]
-                {
-                    new TrackBarMenuItem(brightness),
-                    new ToolStripSeparator(),
-                    new ToolStripMenuItem("E&xit", null,
-                        (s, e) => ExitClicked?.Invoke())
-                });
+                            settings.PropertyChanged += (_, e) =>
+                            {
+                                if (e.PropertyName == nameof(settings.DimmingEnabled))
+                                {
+                                    item.Checked = settings.DimmingEnabled;
+                                }
+                            };
+                        })
+                        .AddHandler((b) => settings.DimmingEnabled = b))
+                    .AddToggle(option => option
+                        .SetText("Active on launch?")
+                        .SetChecked(settings.ActiveOnLaunch)
+                        .AddHandler((b) => settings.ActiveOnLaunch = b))
+                    .AddSeparator()
+                    .AddItem(new TrackBarMenuItem(settings))
+                    .AddSeparator()
+                    .AddButton(option => option
+                        .SetText("E&xit")
+                        .AddHandler(() => ExitClicked?.Invoke())))
+                .Build(Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location)!);
 
-            NotifyIcon.ContextMenuStrip = contextMenu;
-            NotifyIcon.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             NotifyIcon.Text = "PowerDimmer";
             NotifyIcon.Visible = true;
-
-            contextMenu.Closed += (o, a) => { MenuClosed?.Invoke(); };
         }
     }
 
@@ -54,11 +72,11 @@ namespace PowerDimmer
     {
         private TrackBar trackBar;
 
-        public TrackBarMenuItem(Brightness brightness) : base(new ContainerControl())
+        public TrackBarMenuItem(ISettings settings) : base(new ContainerControl())
         {
-            BackColor = Color.White;
+            BackColor = ThemeDictionary.ChromeMidium;
 
-            var label = new Label()
+            var brightnessLabel = new Label()
             {
                 Parent = Control,
                 Text = "Brightness",
@@ -75,8 +93,11 @@ namespace PowerDimmer
                 SmallChange = 5,
                 LargeChange = 20,
                 TickStyle = TickStyle.None,
-                Value = 100 - brightness.Value,
+                Value = settings.Brightness,
             };
+            // Hack to restore hover-highlights after interacting
+            // with trackbar
+            trackBar.Click += (_, _) => Parent.Focus();
 
             var valueBox = new TextBox()
             {
@@ -84,16 +105,16 @@ namespace PowerDimmer
                 Top = 28,
                 Left = 1,
                 Enabled = false,
-                BackColor = Color.White,
+                BackColor = ThemeDictionary.ChromeMidium,
                 TextAlign = HorizontalAlignment.Center,
                 BorderStyle = BorderStyle.None,
-                Text = (100 - brightness.Value).ToString()
+                Text = settings.Brightness.ToString()
             };
 
             trackBar.ValueChanged += (o, s) =>
                 {
                     // invert for "brightness" value
-                    brightness.Value = 100 - trackBar.Value;
+                    settings.Brightness = trackBar.Value;
                     valueBox.Text = trackBar.Value.ToString();
                 };
         }

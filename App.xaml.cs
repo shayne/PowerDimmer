@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
 using Config.Net;
@@ -11,29 +10,43 @@ namespace PowerDimmer
 {
     public partial class App : Application
     {
-        private List<DimWindow> dimWindows = new List<DimWindow>();
-        private Win32.WinEventDelegate eventDelegate;
-        private SortedSet<IntPtr> pinnedHandles = new SortedSet<IntPtr>();
-        private Brightness brightness;
+        private IntPtr lastFgHwnd;
         private ISettings settings;
+        private List<DimWindow> dimWindows { get; } = new();
+        private SortedSet<IntPtr> pinnedHandles { get; } = new();
+        static Func<int, double> brightnessToOpacity = (b) => 1 - (b / 100.0);
 
         public App()
         {
             settings = new ConfigurationBuilder<ISettings>().UseJsonFile("settings.json").Build();
-            brightness = new Brightness(settings.brightness);
-            eventDelegate = new Win32.WinEventDelegate(WinEventProc);
-            foreach (var screen in System.Windows.Forms.Screen.AllScreens)
+            settings.DimmingEnabled = settings.ActiveOnLaunch;
+            settings.PropertyChanged += (s, e) =>
             {
-                var win = new DimWindow(brightness);
-                win.Left = screen.Bounds.Left;
-                win.Top = screen.Bounds.Top;
-                dimWindows.Add(win);
-            }
+                if (e.PropertyName == nameof(settings.Brightness))
+                {
+                    dimWindows.ForEach(w => w.Opacity = brightnessToOpacity(settings.Brightness));
+                }
+                else if (e.PropertyName == nameof(settings.DimmingEnabled))
+                {
+                    if (settings.DimmingEnabled)
+                    {
+                        enableAllDimming(lastFgHwnd);
+                    }
+                    else
+                    {
+                        disableAllDimming();
+                    }
+                }
+            };
         }
 
         private void App_Startup(object sender, StartupEventArgs e)
         {
-            var iconController = new NotifyIconController(brightness);
+            // Record starting foreground window to return
+            // to after launching. Hotkey and dimwin steal focus
+            var startingFgHwnd = Win32.GetForegroundWindow();
+
+            var iconController = new NotifyIconController(settings);
             iconController.ExitClicked += () => Shutdown();
             Exit += (e, s) =>
             {
@@ -41,38 +54,55 @@ namespace PowerDimmer
                 iconController.NotifyIcon.Icon.Dispose();
                 iconController.NotifyIcon.Dispose();
             };
-            iconController.MenuClosed += () =>
-            {
-                settings.brightness = brightness.Value;
-            };
 
-            // Record current foreground window to return
-            // to after launching, hotkey and dimwin steal focus
-            var curHwnd = Win32.GetForegroundWindow();
-
-            HotkeyManager.Current.AddOrReplace("DimToggleHotkey", Key.D, ModifierKeys.Windows | ModifierKeys.Shift, (s, e) =>
+            HotkeyManager.Current.AddOrReplace("PowerDimmerHotkey", Key.D, ModifierKeys.Windows | ModifierKeys.Control | ModifierKeys.Alt, true, (s, e) =>
             {
-                var curHwnd = Win32.GetForegroundWindow();
-                if (pinnedHandles.Contains(curHwnd))
+                settings.DimmingEnabled = !settings.DimmingEnabled;
+            });
+
+            HotkeyManager.Current.AddOrReplace("DimToggleHotkey", Key.D, ModifierKeys.Windows | ModifierKeys.Shift, true, (s, e) =>
+            {
+                if (pinnedHandles.Contains(lastFgHwnd))
                 {
-                    pinnedHandles.Remove(curHwnd);
+                    pinnedHandles.Remove(lastFgHwnd);
                 }
                 else
                 {
-                    pinnedHandles.Add(curHwnd);
+                    pinnedHandles.Add(lastFgHwnd);
                 }
-                Console.WriteLine("count: {0}", pinnedHandles.Count);
             });
+
+            if (settings.ActiveOnLaunch)
+            {
+                enableAllDimming(startingFgHwnd);
+            }
+        }
+
+        private void enableAllDimming(IntPtr fgHwnd)
+        {
+            foreach (var screen in System.Windows.Forms.Screen.AllScreens)
+            {
+                var win = new DimWindow(settings);
+                win.Left = screen.Bounds.Left;
+                win.Top = screen.Bounds.Top;
+                win.Opacity = brightnessToOpacity(settings.Brightness);
+                dimWindows.Add(win);
+            }
 
             dimWindows.ForEach(w => w.Show());
 
-            eventDelegate = new Win32.WinEventDelegate(WinEventProc);
-            IntPtr m_hhook = Win32.SetWinEventHook(Win32.EVENT_SYSTEM_FOREGROUND, Win32.EVENT_SYSTEM_FOREGROUND,
-                                                    IntPtr.Zero, eventDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
+            var eventDelegate = new Win32.WinEventDelegate(WinEventProc);
+            Win32.SetWinEventHook(Win32.EVENT_SYSTEM_FOREGROUND, Win32.EVENT_SYSTEM_FOREGROUND,
+                                  IntPtr.Zero, eventDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
 
-            // Not sure if we need UpdateDimming here
-            // UpdateDimming(curHwnd);
-            Win32.SetForegroundWindow(curHwnd);
+
+            Win32.SetForegroundWindow(fgHwnd);
+        }
+
+        private void disableAllDimming()
+        {
+            dimWindows.ForEach(w => w.Close());
+            dimWindows.Clear();
         }
 
         // https://stackoverflow.com/questions/4372055/detect-active-window-changed-using-c-sharp-without-polling/10280800#10280800
@@ -81,11 +111,11 @@ namespace PowerDimmer
         {
             if (Win32.IsStandardWindow(hwnd) && Win32.HasNoVisibleOwner(hwnd))
             {
-                UpdateDimming(hwnd);
-            }
-            else
-            {
-                Console.WriteLine("Not standard");
+                lastFgHwnd = hwnd;
+                if (settings.DimmingEnabled)
+                {
+                    UpdateDimming(hwnd);
+                }
             }
         }
 
@@ -111,41 +141,15 @@ namespace PowerDimmer
         }
     }
 
-    public interface ISettings
+    public interface ISettings : INotifyPropertyChanged
     {
-        [DefaultValue(50)]
-        int brightness { get; set; }
-    }
+        [Option(Alias = "activeOnLaunch", DefaultValue = true)]
+        bool ActiveOnLaunch { get; set; }
 
-    public class Brightness : INotifyPropertyChanged
-    {
-        public event PropertyChangedEventHandler? PropertyChanged;
-        private int _value;
+        [Option(Alias = "dimmingEnabled", DefaultValue = true)]
+        bool DimmingEnabled { get; set; }
 
-        public Brightness(int initalValue)
-        {
-            _value = initalValue;
-        }
-
-        public int Value
-        {
-            get { return _value; }
-            set
-            {
-                _value = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(Value0));
-            }
-        }
-
-        public double Value0
-        {
-            get { return _value / 100.0; }
-        }
-
-        protected void OnPropertyChanged([CallerMemberName] string? name = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-        }
+        [Option(Alias = "brightness", DefaultValue = 50)]
+        int Brightness { get; set; }
     }
 }

@@ -1,33 +1,19 @@
 using System;
 using System.Windows;
-using System.Windows.Data;
 using System.Windows.Interop;
 
 namespace PowerDimmer
 {
     public partial class DimWindow : Window
     {
-        public IntPtr Handle
-        {
-            get
-            {
-                return new WindowInteropHelper(this).Handle;
-            }
-        }
+        private Lazy<IntPtr> _handle;
+        public IntPtr Handle => _handle.Value;
 
-        private Brightness brightness;
-
-        public DimWindow(Brightness _brightness)
+        public DimWindow(ISettings settings)
         {
             InitializeComponent();
 
-            brightness = _brightness;
-
-            var opacityBinding = new Binding(nameof(brightness.Value0));
-            opacityBinding.Mode = BindingMode.OneWay;
-            opacityBinding.Source = brightness;
-
-            SetBinding(Window.OpacityProperty, opacityBinding);
+            _handle = new(() => new WindowInteropHelper(this).Handle);
         }
 
         protected override void OnActivated(EventArgs e)

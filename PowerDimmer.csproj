@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net6.0-windows</TargetFramework>
+    <TargetFramework>net6.0-windows10.0.19041.0</TargetFramework>
     <ApplicationIcon>appicon.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
@@ -10,9 +10,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Config.Net" Version="4.19.0" />
-    <PackageReference Include="Config.Net.Json" Version="4.19.0" />
-    <PackageReference Include="NHotkey.Wpf" Version="2.1.0" />
+    <PackageReference Include="Config.Net"
+      Version="4.19.0" />
+    <PackageReference Include="Config.Net.Json"
+      Version="4.19.0" />
+    <PackageReference Include="ModernNotifyIcon"
+      Version="1.2.0" />
+    <PackageReference Include="NHotkey.Wpf"
+      Version="2.1.0" />
   </ItemGroup>
 
 </Project>
