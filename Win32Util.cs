@@ -17,12 +17,12 @@ namespace PowerDimmer
                 name.Capacity = MAX_PATH;
                 var nameLength = name.Capacity;
 
-                // TODO: debug this!
                 if (QueryFullProcessImageName(process, 0, name, ref nameLength) == false)
                 {
                     nameLength = 0;
                 }
-                name.Capacity = nameLength;
+                name.Clear();
+                name.Capacity = 0;
                 CloseHandle(process);
             }
             return name.ToString();
