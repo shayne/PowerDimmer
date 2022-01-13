@@ -29,7 +29,7 @@ namespace PowerDimmer
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
-        public static readonly IntPtr HWND_TOP = (IntPtr)0;
+        public static readonly IntPtr HWND_TOP = new IntPtr(0);
         public const uint SWP_NOSIZE = 0x0001;
         public const uint SWP_NOMOVE = 0x0002;
         public const uint SWP_NOZORDER = 0x0004;
@@ -48,11 +48,17 @@ namespace PowerDimmer
         public const uint GW_OWNER = 4;
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+        public static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        static extern bool GetWindowRect(IntPtr hwnd, out RECT lpRect);
+        public static extern bool GetWindowRect(IntPtr hwnd, out RECT lpRect);
+
+        public const int SW_SHOWMAXIMIZED = 3;
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT

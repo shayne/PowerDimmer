@@ -10,7 +10,7 @@ namespace PowerDimmer
 {
     public partial class App : Application
     {
-        private IntPtr lastFgHwnd;
+        private IntPtr curFgHwnd;
         private ISettings settings;
         private List<DimWindow> dimWindows { get; } = new();
         private SortedSet<IntPtr> pinnedHandles { get; } = new();
@@ -30,11 +30,11 @@ namespace PowerDimmer
                 {
                     if (settings.DimmingEnabled)
                     {
-                        enableAllDimming(lastFgHwnd);
+                        dimOn(curFgHwnd);
                     }
                     else
                     {
-                        disableAllDimming();
+                        dimOff();
                     }
                 }
             };
@@ -42,15 +42,13 @@ namespace PowerDimmer
 
         private void App_Startup(object sender, StartupEventArgs e)
         {
-            // Record starting foreground window to return
-            // to after launching. Hotkey and dimwin steal focus
-            var startingFgHwnd = Win32.GetForegroundWindow();
+            curFgHwnd = Win32.GetForegroundWindow();
 
             var iconController = new NotifyIconController(settings);
             iconController.ExitClicked += () => Shutdown();
             Exit += (e, s) =>
             {
-                // iconController.NotifyIcon.Visible = false;
+                iconController.NotifyIcon.Visible = false;
                 iconController.NotifyIcon.Icon.Dispose();
                 iconController.NotifyIcon.Dispose();
             };
@@ -62,47 +60,52 @@ namespace PowerDimmer
 
             HotkeyManager.Current.AddOrReplace("DimToggleHotkey", Key.D, ModifierKeys.Windows | ModifierKeys.Shift, true, (s, e) =>
             {
-                if (pinnedHandles.Contains(lastFgHwnd))
+                var hwnd = Win32.GetForegroundWindow();
+                if (pinnedHandles.Contains(hwnd))
                 {
-                    pinnedHandles.Remove(lastFgHwnd);
+                    pinnedHandles.Remove(hwnd);
                 }
                 else
                 {
-                    pinnedHandles.Add(lastFgHwnd);
+                    pinnedHandles.Add(hwnd);
                 }
             });
 
             if (settings.ActiveOnLaunch)
             {
-                enableAllDimming(startingFgHwnd);
+                dimOn(curFgHwnd);
             }
-        }
-
-        private void enableAllDimming(IntPtr fgHwnd)
-        {
-            foreach (var screen in System.Windows.Forms.Screen.AllScreens)
-            {
-                var win = new DimWindow(settings);
-                win.Left = screen.Bounds.Left;
-                win.Top = screen.Bounds.Top;
-                win.Opacity = brightnessToOpacity(settings.Brightness);
-                dimWindows.Add(win);
-            }
-
-            dimWindows.ForEach(w => w.Show());
 
             var eventDelegate = new Win32.WinEventDelegate(WinEventProc);
             Win32.SetWinEventHook(Win32.EVENT_SYSTEM_FOREGROUND, Win32.EVENT_SYSTEM_FOREGROUND,
                                   IntPtr.Zero, eventDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
-
-
-            Win32.SetForegroundWindow(fgHwnd);
         }
 
-        private void disableAllDimming()
+        private void dimOn(IntPtr fgHwnd)
+        {
+            var opacity = brightnessToOpacity(settings.Brightness);
+            foreach (var screen in System.Windows.Forms.Screen.AllScreens)
+            {
+                var win = new DimWindow(settings)
+                {
+                    Left = screen.Bounds.Left,
+                    Top = screen.Bounds.Top,
+                    Opacity = opacity
+                };
+                win.Show();
+                dimWindows.Add(win);
+            }
+
+            UpdateDimming(fgHwnd);
+        }
+
+        private void dimOff()
         {
             dimWindows.ForEach(w => w.Close());
             dimWindows.Clear();
+            // the following maintains the proper
+            // foreground window upon disabling
+            Win32.SetForegroundWindow(curFgHwnd);
         }
 
         // https://stackoverflow.com/questions/4372055/detect-active-window-changed-using-c-sharp-without-polling/10280800#10280800
@@ -111,7 +114,7 @@ namespace PowerDimmer
         {
             if (Win32.IsStandardWindow(hwnd) && Win32.HasNoVisibleOwner(hwnd))
             {
-                lastFgHwnd = hwnd;
+                curFgHwnd = hwnd;
                 if (settings.DimmingEnabled)
                 {
                     UpdateDimming(hwnd);
@@ -119,24 +122,23 @@ namespace PowerDimmer
             }
         }
 
-        private void UpdateDimming(IntPtr fgHandle)
+        private void UpdateDimming(IntPtr fgHwnd)
         {
-            Console.WriteLine("UpdateDimming, handle: {0}", fgHandle);
             // Set the incoming/foreground handle as TOP...
-            Win32.SetWindowPos(fgHandle, Win32.HWND_TOP, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+            Win32.SetWindowPos(fgHwnd, Win32.HWND_TOP, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
             IntPtr? firstPinned = null;
             foreach (var pinHandle in pinnedHandles)
             {
-                if (pinHandle == fgHandle) continue; // if pinned but also foreground skip
+                if (pinHandle == fgHwnd) continue; // if pinned but also foreground skip
                 // Place each pinned window under the foreground
-                Win32.SetWindowPos(pinHandle, fgHandle, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+                Win32.SetWindowPos(pinHandle, fgHwnd, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
                 // store the first pinned handle we didn't skip over
                 firstPinned ??= pinHandle;
             }
             foreach (var dimWin in dimWindows)
             {
                 // Finally place the dimmer window behind the first pinned or foreground
-                Win32.SetWindowPos(dimWin.Handle, firstPinned ?? fgHandle, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+                Win32.SetWindowPos(dimWin.Handle, firstPinned ?? fgHwnd, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
             }
         }
     }
