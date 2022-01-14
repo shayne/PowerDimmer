@@ -16,6 +16,11 @@ namespace PowerDimmer
             Background = Brushes.Black;
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
+
+            // Seems to be required in order for multiple
+            // monitor support to work. Otherwise dim window
+            // remains on primary display in some cases.
+            Width = 1; Height = 1;
         }
 
         protected override void OnSourceInitialized(EventArgs e)
