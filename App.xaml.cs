@@ -60,6 +60,11 @@ namespace PowerDimmer
 
             HotkeyManager.Current.AddOrReplace("DimToggleHotkey", Key.D, ModifierKeys.Windows | ModifierKeys.Shift, true, (s, e) =>
             {
+                if (!settings.DimmingEnabled)
+                {
+                    return;
+                }
+
                 var hwnd = Win32.GetForegroundWindow();
                 if (pinnedHandles.Contains(hwnd))
                 {
