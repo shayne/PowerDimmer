@@ -13,6 +13,7 @@ namespace PowerDimmer
         private IntPtr curFgHwnd;
         private ISettings settings;
         private List<DimWindow> dimWindows { get; } = new();
+        private List<WindowShade> shadeWindows { get; } = new();
         private SortedSet<IntPtr> pinnedHandles { get; } = new();
         static Func<int, double> brightnessToOpacity = (b) => 1 - (b / 100.0);
 
@@ -76,6 +77,24 @@ namespace PowerDimmer
                 }
             });
 
+            HotkeyManager.Current.AddOrReplace("ShadeToggleHotkey", Key.S, ModifierKeys.Windows | ModifierKeys.Alt, true, (s, e) =>
+            {
+                if (!settings.WindowShadeEnabled)
+                {
+                    return;
+                }
+
+                var hwnd = Win32.GetForegroundWindow();
+
+                var opacity = brightnessToOpacity(settings.Brightness);
+                var shade = new WindowShade(settings, hwnd)
+                {
+                    Opacity = opacity
+                };
+                shade.Show();
+                shadeWindows.Add(shade);
+            });
+
             if (settings.ActiveOnLaunch)
             {
                 dimOn(curFgHwnd);
@@ -86,7 +105,7 @@ namespace PowerDimmer
                                   IntPtr.Zero, eventDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
         }
 
-        private void dimOn(IntPtr fgHwnd)
+        private void dimOn(IntPtr fgHwnd)//creates a dim window on each screen
         {
             var opacity = brightnessToOpacity(settings.Brightness);
             foreach (var screen in System.Windows.Forms.Screen.AllScreens)
@@ -117,6 +136,8 @@ namespace PowerDimmer
         // https://docs.microsoft.com/en-us/windows/win32/winauto/event-constants
         public void WinEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
         {
+            if (!settings.DimmingEnabled)
+                return;
             if (Win32.IsStandardWindow(hwnd) && Win32.HasNoVisibleOwner(hwnd))
             {
                 curFgHwnd = hwnd;
@@ -153,10 +174,13 @@ namespace PowerDimmer
         [Option(Alias = "activeOnLaunch", DefaultValue = true)]
         bool ActiveOnLaunch { get; set; }
 
-        [Option(Alias = "dimmingEnabled", DefaultValue = true)]
+        [Option(Alias = "dimmingEnabled", DefaultValue = false)]
         bool DimmingEnabled { get; set; }
 
         [Option(Alias = "brightness", DefaultValue = 50)]
         int Brightness { get; set; }
+
+        [Option(Alias = "windowShadeEnabled", DefaultValue = true)]
+        bool WindowShadeEnabled { get; set; }
     }
 }
