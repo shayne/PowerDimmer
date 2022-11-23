@@ -161,5 +161,13 @@ namespace PowerDimmer
 
             return true;
         }
+        
+        public static uint GetProcessId(IntPtr window)
+        {
+            uint pid;
+            GetWindowThreadProcessId(window, out pid);
+
+            return pid;
+        }
     }
 }

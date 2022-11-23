@@ -43,7 +43,7 @@ namespace PowerDimmer
                 eventId, eventId,
                 hwnd, eventDelegate,
                 idProcess, idThread,
-                Win32.WinEventHookInternalFlags);
+                Win32.WINEVENT_OUTOFCONTEXT);//Win32.WinEventHookInternalFlags);
         }
 
         public static bool WinEventUnhook(IntPtr hWinEventHook) => 

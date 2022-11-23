@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -16,6 +17,7 @@ namespace PowerDimmer
         private IntPtr hWinEventHook;
         protected Hook.WinEventDelegate WinEventDelegate;
         private Win32.RECT rect;
+        static GCHandle GCSafetyHandle;
         public WindowShade(ISettings settings, IntPtr targetHandle)
         {
             _targetHandle = targetHandle;
@@ -36,7 +38,15 @@ namespace PowerDimmer
 
                 //https://stackoverflow.com/questions/48767318/move-window-when-external-applications-window-moves
                 WinEventDelegate = new Hook.WinEventDelegate(WinMovedEventProc);
-                hWinEventHook = Hook.WinEventHookOne(Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE, _targetHandle, WinMovedEventProc, 0, 0);
+                GCSafetyHandle = GCHandle.Alloc(WinEventDelegate);
+                uint pid = Win32.GetProcessId(_targetHandle);
+                uint targetThreadId = Hook.GetWindowThread(_targetHandle);
+                hWinEventHook = Hook.WinEventHookOne(Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE,
+                    _targetHandle,
+                    WinEventDelegate,
+                    pid,
+                    targetThreadId);
+                //need on activate and close
             }
 
         }

@@ -84,6 +84,7 @@ namespace PowerDimmer
                     return;
                 }
 
+                //unshade window if exists
                 var hwnd = Win32.GetForegroundWindow();
 
                 var opacity = brightnessToOpacity(settings.Brightness);
