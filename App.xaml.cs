@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using Config.Net;
@@ -86,14 +88,22 @@ namespace PowerDimmer
 
                 //unshade window if exists
                 var hwnd = Win32.GetForegroundWindow();
-
-                var opacity = brightnessToOpacity(settings.Brightness);
-                var shade = new WindowShade(settings, hwnd)
+                var shadedWindow = shadeWindows.SingleOrDefault(w => w.TargetHandle == hwnd);
+                if (shadedWindow != null)
                 {
-                    Opacity = opacity
-                };
-                shade.Show();
-                shadeWindows.Add(shade);
+                    shadedWindow.Close();
+                    shadeWindows.Remove(shadedWindow);
+                }
+                else
+                {
+                    var opacity = brightnessToOpacity(settings.Brightness);
+                    var shade = new WindowShade(settings, hwnd)
+                    {
+                        Opacity = opacity
+                    };
+                    shade.Show();
+                    shadeWindows.Add(shade);
+                }
             });
 
             if (settings.ActiveOnLaunch)
@@ -104,6 +114,10 @@ namespace PowerDimmer
             var eventDelegate = new Win32.WinEventDelegate(WinEventProc);
             Win32.SetWinEventHook(Win32.EVENT_SYSTEM_FOREGROUND, Win32.EVENT_SYSTEM_FOREGROUND,
                                   IntPtr.Zero, eventDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
+
+            var eventClosedDelegate = new Win32.WinEventDelegate(WinCloseEventProc);
+            Win32.SetWinEventHook(Win32.SWEH_Events.EVENT_OBJECT_DESTROY, Win32.SWEH_Events.EVENT_OBJECT_DESTROY,
+                                  IntPtr.Zero, eventClosedDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
         }
 
         private void dimOn(IntPtr fgHwnd)//creates a dim window on each screen
@@ -137,14 +151,36 @@ namespace PowerDimmer
         // https://docs.microsoft.com/en-us/windows/win32/winauto/event-constants
         public void WinEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
         {
-            if (!settings.DimmingEnabled)
-                return;
-            if (Win32.IsStandardWindow(hwnd) && Win32.HasNoVisibleOwner(hwnd))
+            if (settings.DimmingEnabled)
             {
-                curFgHwnd = hwnd;
-                if (settings.DimmingEnabled)
+                if (Win32.IsStandardWindow(hwnd) && Win32.HasNoVisibleOwner(hwnd))
                 {
-                    UpdateDimming(hwnd);
+                    curFgHwnd = hwnd;
+                    if (settings.DimmingEnabled)
+                    {
+                        UpdateDimming(hwnd);
+                    }
+                }
+            }
+            if (settings.WindowShadeEnabled)
+            {
+                var whwnd = Win32.GetForegroundWindow();
+                WindowShade windowShade = shadeWindows.SingleOrDefault(s => s.TargetHandle == whwnd);
+                if (windowShade != null)
+                {
+                    UpdateShade(whwnd, windowShade);
+                }
+            }
+        }
+        public void WinCloseEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
+        {
+            if (settings.WindowShadeEnabled)
+            {
+                WindowShade windowShade = shadeWindows.SingleOrDefault(s => s.TargetHandle == hwnd);
+                if(windowShade != null)
+                {
+                    windowShade.Close();
+                    shadeWindows.Remove(windowShade);
                 }
             }
         }
@@ -167,6 +203,18 @@ namespace PowerDimmer
                 // Finally place the dimmer window behind the first pinned or foreground
                 Win32.SetWindowPos(dimWin.Handle, firstPinned ?? fgHwnd, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
             }
+        }
+
+        private void UpdateShade(IntPtr shadedHwnd, WindowShade windowShade)
+        {
+            // Set the window shade handle as TOP...
+            Win32.SetWindowPos(windowShade.Handle, Win32.HWND_TOPMOST, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+            //delay making it not top because the window seems to end up on top immediatly afterwards
+            Task.Run(() => 
+            {
+                System.Threading.Thread.Sleep(500);
+                Win32.SetWindowPos(windowShade.Handle, Win32.HWND_NOTOPMOST, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE); 
+            });
         }
     }
 

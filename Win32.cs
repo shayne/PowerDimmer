@@ -20,6 +20,8 @@ namespace PowerDimmer
         public const int WS_EX_TOOLWINDOW = 0x00000080;
         public const int WS_EX_TRANSPARENT = 0x20;
         public const int WS_EX_NOACTIVATE = 0x08000000;
+        public const int WS_EX_WINDOWEDGE = 0x00000100;
+        public const int GWL_HWNDPARENT = -8;
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
@@ -31,6 +33,9 @@ namespace PowerDimmer
         public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
         public static readonly IntPtr HWND_TOP = new IntPtr(0);
+        public static readonly IntPtr HWND_BOTTOM = new IntPtr(1);
+        public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+        public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         public const uint SWP_NOSIZE = 0x0001;
         public const uint SWP_NOMOVE = 0x0002;
         public const uint SWP_NOZORDER = 0x0004;
@@ -270,12 +275,57 @@ namespace PowerDimmer
         [DllImport("user32.dll")]
         internal static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr voidProcessId);
 
+        [DllImport("user32.dll")]
+        internal static extern uint MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+
+        [DllImport("user32.dll")]
+        internal static extern uint SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        struct WNDCLASSEX
+        {
+            [MarshalAs(UnmanagedType.U4)]
+            public int cbSize;
+            [MarshalAs(UnmanagedType.U4)]
+            public int style;
+            public IntPtr lpfnWndProc;
+            public int cbClsExtra;
+            public int cbWndExtra;
+            public IntPtr hInstance;
+            public IntPtr hIcon;
+            public IntPtr hCursor;
+            public IntPtr hbrBackground;
+            [MarshalAs(UnmanagedType.LPStr)]
+            public string lpszMenuName;
+            [MarshalAs(UnmanagedType.LPStr)]
+            public string lpszClassName;
+            public IntPtr hIconSm;
+        }
+
+        [DllImport("user32.dll", SetLastError = true, EntryPoint = "CreateWindowEx")]
+        public static extern IntPtr CreateWindowEx(
+           int dwExStyle,
+           //UInt16 regResult,
+           [MarshalAs(UnmanagedType.LPStr)]
+           string lpClassName,
+           [MarshalAs(UnmanagedType.LPStr)]
+           string lpWindowName,
+           UInt32 dwStyle,
+           int x,
+           int y,
+           int nWidth,
+           int nHeight,
+           IntPtr hWndParent,
+           IntPtr hMenu,
+           IntPtr hInstance,
+           IntPtr lpParam);
+
         [DllImport("user32.dll", SetLastError = false)]
             internal static extern IntPtr SetWinEventHook(
                 SWEH_Events eventMin,
                 SWEH_Events eventMax,
                 IntPtr hmodWinEventProc,
-                Hook.WinEventDelegate lpfnWinEventProc,
+                WinEventDelegate lpfnWinEventProc,
                 uint idProcess, uint idThread,
                 SWEH_dwFlags dwFlags);
     }

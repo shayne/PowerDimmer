@@ -10,14 +10,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Config.Net"
-      Version="4.19.0" />
-    <PackageReference Include="Config.Net.Json"
-      Version="4.19.0" />
-    <PackageReference Include="ModernNotifyIcon"
-      Version="1.2.0" />
-    <PackageReference Include="NHotkey.Wpf"
-      Version="2.1.0" />
+    <Compile Remove="Hook.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Config.Net" Version="4.19.0" />
+    <PackageReference Include="Config.Net.Json" Version="4.19.0" />
+    <PackageReference Include="ModernNotifyIcon" Version="1.2.0" />
+    <PackageReference Include="NHotkey.Wpf" Version="2.1.0" />
   </ItemGroup>
 
 </Project>

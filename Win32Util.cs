@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace PowerDimmer
@@ -168,6 +169,14 @@ namespace PowerDimmer
             GetWindowThreadProcessId(window, out pid);
 
             return pid;
+        }
+
+        public static Win32.RECT GetWindowRectangle(IntPtr hWnd)
+        {
+            Win32.DwmGetWindowAttribute(hWnd,
+                Win32.DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS,
+                out Win32.RECT rect, Marshal.SizeOf<Win32.RECT>());
+            return rect;
         }
     }
 }

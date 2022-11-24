@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -13,11 +14,12 @@ namespace PowerDimmer
     public partial class WindowShade : Window
     {
         public IntPtr Handle;
-        private IntPtr _targetHandle;
-        private IntPtr hWinEventHook;
-        protected Hook.WinEventDelegate WinEventDelegate;
+         IntPtr _targetHandle;
+        static Win32.WinEventDelegate eventMovedDelegate = null;
         private Win32.RECT rect;
         static GCHandle GCSafetyHandle;
+        public IntPtr TargetHandle { get { return _targetHandle; } }
+
         public WindowShade(ISettings settings, IntPtr targetHandle)
         {
             _targetHandle = targetHandle;
@@ -27,59 +29,48 @@ namespace PowerDimmer
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
 
+            eventMovedDelegate = new Win32.WinEventDelegate(WinEventMovedProc);
+
             if (_targetHandle != IntPtr.Zero)
             {
-                rect = Hook.GetWindowRectangle(targetHandle);
-                //SetPosAndHeight(rect);
+                rect = Win32.GetWindowRectangle(targetHandle);
+                SetPosAndHeight(rect);
                 Left = rect.Left;
                 Top = rect.Top;
                 Width = rect.Right - rect.Left;
                 Height = rect.Bottom - rect.Top;
 
-                //https://stackoverflow.com/questions/48767318/move-window-when-external-applications-window-moves
-                WinEventDelegate = new Hook.WinEventDelegate(WinMovedEventProc);
-                GCSafetyHandle = GCHandle.Alloc(WinEventDelegate);
                 uint pid = Win32.GetProcessId(_targetHandle);
-                uint targetThreadId = Hook.GetWindowThread(_targetHandle);
-                hWinEventHook = Hook.WinEventHookOne(Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE,
-                    _targetHandle,
-                    WinEventDelegate,
-                    pid,
-                    targetThreadId);
-                //need on activate and close
+                uint targetThreadId = Win32.GetWindowThreadProcessId(_targetHandle, IntPtr.Zero);
+                //https://stackoverflow.com/questions/48767318/move-window-when-external-applications-window-moves
+                //GCSafetyHandle = GCHandle.Alloc(WinEventDelegate);
+                Win32.SetWinEventHook((uint)Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE, (uint)Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE,
+                                      _targetHandle, eventMovedDelegate, pid, targetThreadId, Win32.WINEVENT_OUTOFCONTEXT);
             }
 
         }
 
-        private void WinMovedEventProc(
-            IntPtr hWinEventHook, 
-            Win32.SWEH_Events eventType, 
-            IntPtr hWnd, 
-            Win32.SWEH_ObjectId idObject, 
-            long idChild, uint dwEventThread, uint dwmsEventTime)
+
+        public void WinEventMovedProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
         {
-            if (hWnd != _targetHandle)
+            Debug.Print($"event triggered for {hwnd} event type {eventType}");
+            if (hwnd != _targetHandle)
                 return;
-            rect = Hook.GetWindowRectangle(_targetHandle);
+            rect = Win32.GetWindowRectangle(_targetHandle);
             SetPosAndHeight(rect);
         }
 
         private void SetPosAndHeight(Win32.RECT rect)
         {
-            Win32.SetWindowPos(Handle,
-                _targetHandle,//(IntPtr)(-1),
-                rect.Left,
-                rect.Top,
-                rect.Right - rect.Left,
-                rect.Bottom - rect.Top,
-                0);
-            Win32.SetWindowPos(_targetHandle,
-                Handle,
-                0,
-                0,
-                0,
-                0,
-                Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+            //use MoveWindow
+            //Win32.SetWindowPos(Handle,
+            //    _targetHandle,//(IntPtr)(-1),
+            //    rect.Left,
+            //    rect.Top,
+            //    rect.Right - rect.Left,
+            //    rect.Bottom - rect.Top,
+            //    Win32.SWP_NOACTIVATE | Win32.SWP_NOZORDER);
+            Win32.MoveWindow(Handle, rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top, false);
         }
 
         protected override void OnSourceInitialized(EventArgs e)
