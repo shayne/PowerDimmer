@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -14,13 +15,20 @@ namespace PowerDimmer
     public partial class WindowShade : Window
     {
         public IntPtr Handle;
-         IntPtr _targetHandle;
+        IntPtr _targetHandle;
         static Win32.WinEventDelegate eventMovedDelegate = null;
         private Win32.RECT rect;
         static GCHandle GCSafetyHandle;
+        private IntPtr eventHook;
         public IntPtr TargetHandle { get { return _targetHandle; } }
+        private bool isLocalPos = false;
 
-        public WindowShade(ISettings settings, IntPtr targetHandle)
+        private double _left;
+        private double _top;
+        private double _width;
+        private double _height;
+
+        public WindowShade(IntPtr targetHandle)
         {
             _targetHandle = targetHandle;
             ShowInTaskbar = false;
@@ -30,6 +38,7 @@ namespace PowerDimmer
             ResizeMode = ResizeMode.NoResize;
 
             eventMovedDelegate = new Win32.WinEventDelegate(WinEventMovedProc);
+            GCSafetyHandle = GCHandle.Alloc(eventMovedDelegate);
 
             if (_targetHandle != IntPtr.Zero)
             {
@@ -44,12 +53,47 @@ namespace PowerDimmer
                 uint targetThreadId = Win32.GetWindowThreadProcessId(_targetHandle, IntPtr.Zero);
                 //https://stackoverflow.com/questions/48767318/move-window-when-external-applications-window-moves
                 //GCSafetyHandle = GCHandle.Alloc(WinEventDelegate);
-                Win32.SetWinEventHook((uint)Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE, (uint)Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE,
+                eventHook = Win32.SetWinEventHook((uint)Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE, (uint)Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE,
                                       _targetHandle, eventMovedDelegate, pid, targetThreadId, Win32.WINEVENT_OUTOFCONTEXT);
             }
 
         }
 
+        public WindowShade(IntPtr targetHandle, double left, double top, double width, double height)
+        {
+            _targetHandle = targetHandle;
+            ShowInTaskbar = false;
+            AllowsTransparency = true;
+            Background = Brushes.Black;
+            WindowStyle = WindowStyle.None;
+            ResizeMode = ResizeMode.NoResize;
+
+            _left = left;
+            _top = top; 
+            _width = width;
+            _height = height;
+            
+            isLocalPos = true;
+
+            eventMovedDelegate = new Win32.WinEventDelegate(WinEventMovedProc);
+            GCSafetyHandle = GCHandle.Alloc(eventMovedDelegate);
+
+            if (_targetHandle != IntPtr.Zero)
+            {
+                rect = Win32.GetWindowRectangle(targetHandle);
+                Left = rect.Left + left;
+                Top = rect.Top + top;
+                Width = width ;
+                Height = height;
+
+                uint pid = Win32.GetProcessId(_targetHandle);
+                uint targetThreadId = Win32.GetWindowThreadProcessId(_targetHandle, IntPtr.Zero);
+                //https://stackoverflow.com/questions/48767318/move-window-when-external-applications-window-moves
+                //GCSafetyHandle = GCHandle.Alloc(WinEventDelegate);
+                eventHook = Win32.SetWinEventHook((uint)Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE, (uint)Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE,
+                                      _targetHandle, eventMovedDelegate, pid, targetThreadId, Win32.WINEVENT_OUTOFCONTEXT);
+            }
+        }
 
         public void WinEventMovedProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
         {
@@ -60,7 +104,7 @@ namespace PowerDimmer
             SetPosAndHeight(rect);
         }
 
-        private void SetPosAndHeight(Win32.RECT rect)
+        private void SetPosAndHeight(Win32.RECT rect)//needs a custom offset version
         {
             //use MoveWindow
             //Win32.SetWindowPos(Handle,
@@ -70,7 +114,16 @@ namespace PowerDimmer
             //    rect.Right - rect.Left,
             //    rect.Bottom - rect.Top,
             //    Win32.SWP_NOACTIVATE | Win32.SWP_NOZORDER);
-            Win32.MoveWindow(Handle, rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top, false);
+            if(!isLocalPos)
+                Win32.MoveWindow(Handle, rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top, false);
+            else
+            {
+                int left = (int)(rect.Left + _left);
+                int top = (int)(rect.Top + _top);
+                int width = (int)(_width);
+                int height = (int)(_height);
+                Win32.MoveWindow(Handle, left, top, width, height, false);
+            }
         }
 
         protected override void OnSourceInitialized(EventArgs e)
@@ -82,6 +135,19 @@ namespace PowerDimmer
             Win32.ShowWindow(Handle, Win32.SW_SHOWNORMAL);
 
             base.OnSourceInitialized(e);
+        }
+
+        protected override void OnClosing(CancelEventArgs e)
+        {
+            base.OnClosing(e);
+            if(!e.Cancel)
+            {
+                if(GCSafetyHandle.IsAllocated)
+                {
+                    GCSafetyHandle.Free();
+                }
+                Win32.UnhookWinEvent(eventHook);
+            }
         }
     }
 }

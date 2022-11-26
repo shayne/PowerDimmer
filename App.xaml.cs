@@ -97,13 +97,33 @@ namespace PowerDimmer
                 else
                 {
                     var opacity = brightnessToOpacity(settings.Brightness);
-                    var shade = new WindowShade(settings, hwnd)
+                    var shade = new WindowShade(hwnd)
                     {
                         Opacity = opacity
                     };
                     shade.Show();
                     shadeWindows.Add(shade);
                 }
+            });
+
+            HotkeyManager.Current.AddOrReplace("CustomShadeHotkey", Key.A, ModifierKeys.Windows | ModifierKeys.Alt, true, (s, e) =>
+            {
+                if (!settings.WindowShadeEnabled)
+                {
+                    return;
+                }
+
+                var hwnd = Win32.GetForegroundWindow();
+                var shadedWindow = shadeWindows.SingleOrDefault(w => w.TargetHandle == hwnd);
+                if (shadedWindow != null)
+                {
+                    shadedWindow.Close();
+                    shadeWindows.Remove(shadedWindow);
+                }
+                var opacity = brightnessToOpacity(settings.Brightness);
+                var customShadeCreatedDelegate = new Win32.CustomShadeCreatedEventDelegate(CreatedCustomShadeEventProc);
+                var customShade = new CustomShadeTool(hwnd, customShadeCreatedDelegate);
+                customShade.Show();
             });
 
             if (settings.ActiveOnLaunch)
@@ -215,6 +235,27 @@ namespace PowerDimmer
                 System.Threading.Thread.Sleep(500);
                 Win32.SetWindowPos(windowShade.Handle, Win32.HWND_NOTOPMOST, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE); 
             });
+        }
+
+        public void CreatedCustomShadeEventProc(Window shadeTool, IntPtr hwnd, double left, double top, double width, double height)
+        {
+            var shadedWindow = shadeWindows.SingleOrDefault(w => w.TargetHandle == hwnd);
+            if (shadedWindow != null)
+            {
+                shadedWindow.Close();
+                shadeWindows.Remove(shadedWindow);
+            }
+            else
+            {
+                var opacity = brightnessToOpacity(settings.Brightness);
+                var shade = new WindowShade(hwnd, left, top, width, height)
+                {
+                    Opacity = opacity
+                };
+                shade.Show();
+                shadeWindows.Add(shade);
+            }
+            shadeTool.Close();
         }
     }
 

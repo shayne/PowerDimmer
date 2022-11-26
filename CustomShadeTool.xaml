@@ -1,0 +1,23 @@
+﻿<Window x:Class="PowerDimmer.CustomShadeTool"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:PowerDimmer"
+        mc:Ignorable="d"
+        Title="CustomShadeTool" Height="450" Width="800"
+        MouseDown="Canvas_MouseDown"
+            MouseMove="Canvas_MouseMove"    
+            MouseUp="Canvas_MouseUp">
+    <Canvas>
+        <Rectangle 
+            Name="selectionRect"
+            Fill="Black"
+            Canvas.Left="{Binding Path=LeftPos, Mode=TwoWay}"
+            Canvas.Top="{Binding Path=TopPos, Mode=TwoWay}"
+            Width="{Binding Path=ShadeWidth, Mode=TwoWay}"
+            Height="{Binding Path=ShadeHeight, Mode=TwoWay}"
+            >
+        </Rectangle>
+    </Canvas>
+</Window>

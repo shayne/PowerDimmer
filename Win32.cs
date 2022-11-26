@@ -328,5 +328,7 @@ namespace PowerDimmer
                 WinEventDelegate lpfnWinEventProc,
                 uint idProcess, uint idThread,
                 SWEH_dwFlags dwFlags);
+
+        public delegate void CustomShadeCreatedEventDelegate(System.Windows.Window shadeTool, IntPtr hwnd, double left, double top, double width, double height);
     }
 }
