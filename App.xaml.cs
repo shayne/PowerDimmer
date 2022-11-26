@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -18,6 +19,9 @@ namespace PowerDimmer
         private List<WindowShade> shadeWindows { get; } = new();
         private SortedSet<IntPtr> pinnedHandles { get; } = new();
         static Func<int, double> brightnessToOpacity = (b) => 1 - (b / 100.0);
+
+        static GCHandle GCSafetyHandleForActive;
+        static GCHandle GCSafetyHandleForClose;
 
         public App()
         {
@@ -132,10 +136,12 @@ namespace PowerDimmer
             }
 
             var eventDelegate = new Win32.WinEventDelegate(WinEventProc);
+            GCSafetyHandleForActive = GCHandle.Alloc(eventDelegate);
             Win32.SetWinEventHook(Win32.EVENT_SYSTEM_FOREGROUND, Win32.EVENT_SYSTEM_FOREGROUND,
                                   IntPtr.Zero, eventDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
 
             var eventClosedDelegate = new Win32.WinEventDelegate(WinCloseEventProc);
+            GCSafetyHandleForClose = GCHandle.Alloc(eventClosedDelegate);
             Win32.SetWinEventHook(Win32.SWEH_Events.EVENT_OBJECT_DESTROY, Win32.SWEH_Events.EVENT_OBJECT_DESTROY,
                                   IntPtr.Zero, eventClosedDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
         }
@@ -256,6 +262,19 @@ namespace PowerDimmer
                 shadeWindows.Add(shade);
             }
             shadeTool.Close();
+        }
+
+        protected override void OnExit(ExitEventArgs e)
+        {
+            base.OnExit(e);
+            if(GCSafetyHandleForActive.IsAllocated)
+            {
+                GCSafetyHandleForActive.Free();
+            }
+            if(GCSafetyHandleForClose.IsAllocated)
+            {
+                GCSafetyHandleForClose.Free();
+            }
         }
     }
 

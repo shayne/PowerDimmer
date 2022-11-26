@@ -37,6 +37,8 @@ namespace PowerDimmer
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
 
+            //Allocating the delegate to a GCHandle example from here. This prevents it from getting garbage collected and windows throwing a message error.
+            //https://stackoverflow.com/questions/48767318/move-window-when-external-applications-window-moves
             eventMovedDelegate = new Win32.WinEventDelegate(WinEventMovedProc);
             GCSafetyHandle = GCHandle.Alloc(eventMovedDelegate);
 
@@ -51,8 +53,6 @@ namespace PowerDimmer
 
                 uint pid = Win32.GetProcessId(_targetHandle);
                 uint targetThreadId = Win32.GetWindowThreadProcessId(_targetHandle, IntPtr.Zero);
-                //https://stackoverflow.com/questions/48767318/move-window-when-external-applications-window-moves
-                //GCSafetyHandle = GCHandle.Alloc(WinEventDelegate);
                 eventHook = Win32.SetWinEventHook((uint)Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE, (uint)Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE,
                                       _targetHandle, eventMovedDelegate, pid, targetThreadId, Win32.WINEVENT_OUTOFCONTEXT);
             }
@@ -88,8 +88,6 @@ namespace PowerDimmer
 
                 uint pid = Win32.GetProcessId(_targetHandle);
                 uint targetThreadId = Win32.GetWindowThreadProcessId(_targetHandle, IntPtr.Zero);
-                //https://stackoverflow.com/questions/48767318/move-window-when-external-applications-window-moves
-                //GCSafetyHandle = GCHandle.Alloc(WinEventDelegate);
                 eventHook = Win32.SetWinEventHook((uint)Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE, (uint)Win32.SWEH_Events.EVENT_OBJECT_LOCATIONCHANGE,
                                       _targetHandle, eventMovedDelegate, pid, targetThreadId, Win32.WINEVENT_OUTOFCONTEXT);
             }
@@ -97,23 +95,14 @@ namespace PowerDimmer
 
         public void WinEventMovedProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
         {
-            Debug.Print($"event triggered for {hwnd} event type {eventType}");
             if (hwnd != _targetHandle)
                 return;
             rect = Win32.GetWindowRectangle(_targetHandle);
             SetPosAndHeight(rect);
         }
 
-        private void SetPosAndHeight(Win32.RECT rect)//needs a custom offset version
+        private void SetPosAndHeight(Win32.RECT rect)
         {
-            //use MoveWindow
-            //Win32.SetWindowPos(Handle,
-            //    _targetHandle,//(IntPtr)(-1),
-            //    rect.Left,
-            //    rect.Top,
-            //    rect.Right - rect.Left,
-            //    rect.Bottom - rect.Top,
-            //    Win32.SWP_NOACTIVATE | Win32.SWP_NOZORDER);
             if(!isLocalPos)
                 Win32.MoveWindow(Handle, rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top, false);
             else
