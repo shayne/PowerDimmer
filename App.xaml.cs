@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using Config.Net;
@@ -13,8 +16,12 @@ namespace PowerDimmer
         private IntPtr curFgHwnd;
         private ISettings settings;
         private List<DimWindow> dimWindows { get; } = new();
+        private List<WindowShade> shadeWindows { get; } = new();
         private SortedSet<IntPtr> pinnedHandles { get; } = new();
         static Func<int, double> brightnessToOpacity = (b) => 1 - (b / 100.0);
+
+        static GCHandle GCSafetyHandleForActive;
+        static GCHandle GCSafetyHandleForClose;
 
         public App()
         {
@@ -76,17 +83,70 @@ namespace PowerDimmer
                 }
             });
 
+            HotkeyManager.Current.AddOrReplace("ShadeToggleHotkey", Key.S, ModifierKeys.Windows | ModifierKeys.Alt, true, (s, e) =>
+            {
+                if (!settings.WindowShadeEnabled)
+                {
+                    return;
+                }
+
+                //unshade window if exists
+                var hwnd = Win32.GetForegroundWindow();
+                var shadedWindow = shadeWindows.SingleOrDefault(w => w.TargetHandle == hwnd);
+                if (shadedWindow != null)
+                {
+                    shadedWindow.Close();
+                    shadeWindows.Remove(shadedWindow);
+                }
+                else
+                {
+                    var opacity = brightnessToOpacity(settings.Brightness);
+                    var shade = new WindowShade(hwnd)
+                    {
+                        Opacity = opacity
+                    };
+                    shade.Show();
+                    shadeWindows.Add(shade);
+                }
+            });
+
+            HotkeyManager.Current.AddOrReplace("CustomShadeHotkey", Key.A, ModifierKeys.Windows | ModifierKeys.Alt, true, (s, e) =>
+            {
+                if (!settings.WindowShadeEnabled)
+                {
+                    return;
+                }
+
+                var hwnd = Win32.GetForegroundWindow();
+                var shadedWindow = shadeWindows.SingleOrDefault(w => w.TargetHandle == hwnd);
+                if (shadedWindow != null)
+                {
+                    shadedWindow.Close();
+                    shadeWindows.Remove(shadedWindow);
+                }
+                var opacity = brightnessToOpacity(settings.Brightness);
+                var customShadeCreatedDelegate = new Win32.CustomShadeCreatedEventDelegate(CreatedCustomShadeEventProc);
+                var customShade = new CustomShadeTool(hwnd, customShadeCreatedDelegate);
+                customShade.Show();
+            });
+
             if (settings.ActiveOnLaunch)
             {
                 dimOn(curFgHwnd);
             }
 
             var eventDelegate = new Win32.WinEventDelegate(WinEventProc);
+            GCSafetyHandleForActive = GCHandle.Alloc(eventDelegate);
             Win32.SetWinEventHook(Win32.EVENT_SYSTEM_FOREGROUND, Win32.EVENT_SYSTEM_FOREGROUND,
                                   IntPtr.Zero, eventDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
+
+            var eventClosedDelegate = new Win32.WinEventDelegate(WinCloseEventProc);
+            GCSafetyHandleForClose = GCHandle.Alloc(eventClosedDelegate);
+            Win32.SetWinEventHook(Win32.SWEH_Events.EVENT_OBJECT_DESTROY, Win32.SWEH_Events.EVENT_OBJECT_DESTROY,
+                                  IntPtr.Zero, eventClosedDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
         }
 
-        private void dimOn(IntPtr fgHwnd)
+        private void dimOn(IntPtr fgHwnd)//creates a dim window on each screen
         {
             var opacity = brightnessToOpacity(settings.Brightness);
             foreach (var screen in System.Windows.Forms.Screen.AllScreens)
@@ -117,12 +177,36 @@ namespace PowerDimmer
         // https://docs.microsoft.com/en-us/windows/win32/winauto/event-constants
         public void WinEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
         {
-            if (Win32.IsStandardWindow(hwnd) && Win32.HasNoVisibleOwner(hwnd))
+            if (settings.DimmingEnabled)
             {
-                curFgHwnd = hwnd;
-                if (settings.DimmingEnabled)
+                if (Win32.IsStandardWindow(hwnd) && Win32.HasNoVisibleOwner(hwnd))
                 {
-                    UpdateDimming(hwnd);
+                    curFgHwnd = hwnd;
+                    if (settings.DimmingEnabled)
+                    {
+                        UpdateDimming(hwnd);
+                    }
+                }
+            }
+            if (settings.WindowShadeEnabled)
+            {
+                var whwnd = Win32.GetForegroundWindow();
+                WindowShade windowShade = shadeWindows.SingleOrDefault(s => s.TargetHandle == whwnd);
+                if (windowShade != null)
+                {
+                    UpdateShade(whwnd, windowShade);
+                }
+            }
+        }
+        public void WinCloseEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
+        {
+            if (settings.WindowShadeEnabled)
+            {
+                WindowShade windowShade = shadeWindows.SingleOrDefault(s => s.TargetHandle == hwnd);
+                if(windowShade != null)
+                {
+                    windowShade.Close();
+                    shadeWindows.Remove(windowShade);
                 }
             }
         }
@@ -146,6 +230,52 @@ namespace PowerDimmer
                 Win32.SetWindowPos(dimWin.Handle, firstPinned ?? fgHwnd, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
             }
         }
+
+        private void UpdateShade(IntPtr shadedHwnd, WindowShade windowShade)
+        {
+            // Set the window shade handle as TOP...
+            Win32.SetWindowPos(windowShade.Handle, Win32.HWND_TOPMOST, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+            //delay making it not top because the window seems to end up on top immediatly afterwards
+            Task.Run(() => 
+            {
+                System.Threading.Thread.Sleep(500);
+                Win32.SetWindowPos(windowShade.Handle, Win32.HWND_NOTOPMOST, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE); 
+            });
+        }
+
+        public void CreatedCustomShadeEventProc(Window shadeTool, IntPtr hwnd, double left, double top, double width, double height)
+        {
+            var shadedWindow = shadeWindows.SingleOrDefault(w => w.TargetHandle == hwnd);
+            if (shadedWindow != null)
+            {
+                shadedWindow.Close();
+                shadeWindows.Remove(shadedWindow);
+            }
+            else
+            {
+                var opacity = brightnessToOpacity(settings.Brightness);
+                var shade = new WindowShade(hwnd, left, top, width, height)
+                {
+                    Opacity = opacity
+                };
+                shade.Show();
+                shadeWindows.Add(shade);
+            }
+            shadeTool.Close();
+        }
+
+        protected override void OnExit(ExitEventArgs e)
+        {
+            base.OnExit(e);
+            if(GCSafetyHandleForActive.IsAllocated)
+            {
+                GCSafetyHandleForActive.Free();
+            }
+            if(GCSafetyHandleForClose.IsAllocated)
+            {
+                GCSafetyHandleForClose.Free();
+            }
+        }
     }
 
     public interface ISettings : INotifyPropertyChanged
@@ -153,10 +283,13 @@ namespace PowerDimmer
         [Option(Alias = "activeOnLaunch", DefaultValue = true)]
         bool ActiveOnLaunch { get; set; }
 
-        [Option(Alias = "dimmingEnabled", DefaultValue = true)]
+        [Option(Alias = "dimmingEnabled", DefaultValue = false)]
         bool DimmingEnabled { get; set; }
 
         [Option(Alias = "brightness", DefaultValue = 50)]
         int Brightness { get; set; }
+
+        [Option(Alias = "windowShadeEnabled", DefaultValue = true)]
+        bool WindowShadeEnabled { get; set; }
     }
 }

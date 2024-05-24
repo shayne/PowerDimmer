@@ -20,6 +20,10 @@ Initial Release
 * Toggle dimming for a specific window via `Win + Shift + D`
 * Adjust brightness level from the system tray context menu
 
+New features
+* Toggle shade for a specific window via `Win + Alt + S`, usefull for that one bright screen without darkmode
+* Shade an area of a window via `Win + Alt + A` then select the area to shade. The shade will move with the window
+
 ## Building
 
 Just install the [.NET 6.0 SDK](https://dotnet.microsoft.com/en-us/download) and then `dotnet run` 

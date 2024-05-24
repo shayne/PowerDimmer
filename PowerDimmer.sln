@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.3.32922.545
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PowerDimmer", "PowerDimmer.csproj", "{D7DBD704-8707-402F-9346-CA8DB77075CC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D7DBD704-8707-402F-9346-CA8DB77075CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7DBD704-8707-402F-9346-CA8DB77075CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7DBD704-8707-402F-9346-CA8DB77075CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7DBD704-8707-402F-9346-CA8DB77075CC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E1F16600-646A-4941-B25A-14C64B9E012F}
+	EndGlobalSection
+EndGlobal
