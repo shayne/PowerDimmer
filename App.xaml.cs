@@ -209,6 +209,15 @@ namespace PowerDimmer
                     shadeWindows.Remove(windowShade);
                 }
             }
+
+            if(settings.DimTaskbar)
+            {
+                IntPtr taskbarHwnd = Win32.FindWindow("Shell_TrayWnd", null);
+                if (taskbarHwnd != IntPtr.Zero)
+                {
+                    Win32.SetWindowPos(taskbarHwnd, Win32.HWND_BOTTOM, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+                }
+            }
         }
 
         private void UpdateDimming(IntPtr fgHwnd)
