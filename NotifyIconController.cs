@@ -35,6 +35,10 @@ namespace PowerDimmer
                         })
                         .AddHandler((b) => settings.DimmingEnabled = b))
                     .AddToggle(option => option
+                        .SetText("Dim Taskbar?")
+                        .SetChecked(settings.DimTaskbar)
+                        .AddHandler((b) => settings.DimTaskbar = b))
+                    .AddToggle(option => option
                         .SetText("Active on launch?")
                         .SetChecked(settings.ActiveOnLaunch)
                         .AddHandler((b) => settings.ActiveOnLaunch = b))

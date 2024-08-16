@@ -209,6 +209,15 @@ namespace PowerDimmer
                     shadeWindows.Remove(windowShade);
                 }
             }
+
+            if(settings.DimTaskbar)
+            {
+                IntPtr taskbarHwnd = Win32.FindWindow("Shell_TrayWnd", null);
+                if (taskbarHwnd != IntPtr.Zero)
+                {
+                    Win32.SetWindowPos(taskbarHwnd, Win32.HWND_BOTTOM, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+                }
+            }
         }
 
         private void UpdateDimming(IntPtr fgHwnd)
@@ -228,6 +237,15 @@ namespace PowerDimmer
             {
                 // Finally place the dimmer window behind the first pinned or foreground
                 Win32.SetWindowPos(dimWin.Handle, firstPinned ?? fgHwnd, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+            }
+
+            if(settings.DimTaskbar)
+            {
+                IntPtr taskbarHwnd = Win32.FindWindow("Shell_TrayWnd", null);
+                if (taskbarHwnd != IntPtr.Zero)
+                {
+                    Win32.SetWindowPos(taskbarHwnd, Win32.HWND_BOTTOM, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+                }
             }
         }
 
@@ -285,6 +303,9 @@ namespace PowerDimmer
 
         [Option(Alias = "dimmingEnabled", DefaultValue = false)]
         bool DimmingEnabled { get; set; }
+
+        [Option(Alias = "dimTaskbar", DefaultValue = true)]
+        bool DimTaskbar { get; set; }
 
         [Option(Alias = "brightness", DefaultValue = 50)]
         int Brightness { get; set; }
