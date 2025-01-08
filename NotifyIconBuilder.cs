@@ -26,7 +26,7 @@ namespace PowerDimmer
             return this;
         }
 
-        public NotifyIcon Build(Icon icon)
+        public NotifyIcon Build(Icon? icon)
         {
             return new NotifyIcon
             {

@@ -48,10 +48,23 @@ namespace PowerDimmer
                     .AddButton(option => option
                         .SetText("E&xit")
                         .AddHandler(() => ExitClicked?.Invoke())))
-                .Build(Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location)!);
+                .Build(GetIcon());
 
             NotifyIcon.Text = "PowerDimmer";
             NotifyIcon.Visible = true;
+        }
+
+        private static Icon? GetIcon()
+        {
+            var location = Assembly.GetExecutingAssembly().Location;
+            if (string.IsNullOrEmpty(location))
+            {
+                location = Environment.ProcessPath;
+            }
+
+            return !string.IsNullOrEmpty(location)
+                ? Icon.ExtractAssociatedIcon(location)
+                : null;
         }
     }
 
