@@ -101,7 +101,7 @@ namespace PowerDimmer
             };
             // Hack to restore hover-highlights after interacting
             // with trackbar
-            trackBar.Click += (_, _) => Parent.Focus();
+            trackBar.Click += (_, _) => Parent?.Focus();
 
             var valueBox = new TextBox()
             {
