@@ -1,12 +1,16 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.IO;
 using System.Threading.Tasks;
+using System.Windows.Threading;
 using System.Windows;
 using System.Windows.Input;
+using FormsNotifyIcon = System.Windows.Forms.NotifyIcon;
 using Config.Net;
+using NHotkey;
 using NHotkey.Wpf;
 
 namespace PowerDimmer
@@ -15,6 +19,7 @@ namespace PowerDimmer
     {
         private IntPtr curFgHwnd;
         private ISettings settings;
+        private FormsNotifyIcon? notifyIcon;
         private List<DimWindow> dimWindows { get; } = new();
         private List<WindowShade> shadeWindows { get; } = new();
         private SortedSet<IntPtr> pinnedHandles { get; } = new();
@@ -25,8 +30,10 @@ namespace PowerDimmer
 
         public App()
         {
-            settings = new ConfigurationBuilder<ISettings>().UseJsonFile("settings.json").Build();
+            settings = LoadSettings();
+            NormalizeSettings(settings);
             settings.DimmingEnabled = settings.ActiveOnLaunch;
+            SetupCrashLogging();
             settings.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(settings.Brightness))
@@ -47,103 +54,244 @@ namespace PowerDimmer
             };
         }
 
-        private void App_Startup(object sender, StartupEventArgs e)
+        private static string GetLogPath()
         {
-            curFgHwnd = Win32.GetForegroundWindow();
+            var appDataDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "PowerDimmer");
+            Directory.CreateDirectory(appDataDir);
+            return Path.Combine(appDataDir, "crash.log");
+        }
 
-            var iconController = new NotifyIconController(settings);
-            iconController.ExitClicked += () => Shutdown();
-            Exit += (e, s) =>
+        private static void WriteCrashLog(Exception ex, string source)
+        {
+            try
             {
-                iconController.NotifyIcon.Visible = false;
-                iconController.NotifyIcon.Icon.Dispose();
-                iconController.NotifyIcon.Dispose();
+                var logPath = GetLogPath();
+                var entry = $"[{DateTime.Now:O}] {source}{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}";
+                File.AppendAllText(logPath, entry);
+            }
+            catch
+            {
+                // Avoid secondary failures during crash handling.
+            }
+        }
+
+        private void SetupCrashLogging()
+        {
+            DispatcherUnhandledException += (sender, args) =>
+            {
+                WriteCrashLog(args.Exception, "DispatcherUnhandledException");
+                args.Handled = true;
+                Shutdown();
             };
 
-            HotkeyManager.Current.AddOrReplace("PowerDimmerHotkey", Key.D, ModifierKeys.Windows | ModifierKeys.Control | ModifierKeys.Alt, true, (s, e) =>
+            AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
             {
-                settings.DimmingEnabled = !settings.DimmingEnabled;
-            });
+                if (args.ExceptionObject is Exception ex)
+                {
+                    WriteCrashLog(ex, "AppDomain.UnhandledException");
+                }
+            };
 
-            HotkeyManager.Current.AddOrReplace("DimToggleHotkey", Key.D, ModifierKeys.Windows | ModifierKeys.Shift, true, (s, e) =>
+            TaskScheduler.UnobservedTaskException += (sender, args) =>
             {
-                if (!settings.DimmingEnabled)
-                {
-                    return;
-                }
+                WriteCrashLog(args.Exception, "TaskScheduler.UnobservedTaskException");
+                args.SetObserved();
+            };
+        }
 
-                var hwnd = Win32.GetForegroundWindow();
-                if (pinnedHandles.Contains(hwnd))
-                {
-                    pinnedHandles.Remove(hwnd);
-                }
-                else
-                {
-                    pinnedHandles.Add(hwnd);
-                }
-            });
+        private static string GetSettingsPath()
+        {
+            var appDataDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "PowerDimmer");
+            Directory.CreateDirectory(appDataDir);
+            return Path.Combine(appDataDir, "settings.json");
+        }
 
-            HotkeyManager.Current.AddOrReplace("ShadeToggleHotkey", Key.S, ModifierKeys.Windows | ModifierKeys.Alt, true, (s, e) =>
+        private static ISettings LoadSettings()
+        {
+            var settingsPath = GetSettingsPath();
+            var legacyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+
+            if (!File.Exists(settingsPath) && File.Exists(legacyPath))
             {
-                if (!settings.WindowShadeEnabled)
-                {
-                    return;
-                }
-
-                //unshade window if exists
-                var hwnd = Win32.GetForegroundWindow();
-                var shadedWindow = shadeWindows.SingleOrDefault(w => w.TargetHandle == hwnd);
-                if (shadedWindow != null)
-                {
-                    shadedWindow.Close();
-                    shadeWindows.Remove(shadedWindow);
-                }
-                else
-                {
-                    var opacity = brightnessToOpacity(settings.Brightness);
-                    var shade = new WindowShade(hwnd)
-                    {
-                        Opacity = opacity
-                    };
-                    shade.Show();
-                    shadeWindows.Add(shade);
-                }
-            });
-
-            HotkeyManager.Current.AddOrReplace("CustomShadeHotkey", Key.A, ModifierKeys.Windows | ModifierKeys.Alt, true, (s, e) =>
-            {
-                if (!settings.WindowShadeEnabled)
-                {
-                    return;
-                }
-
-                var hwnd = Win32.GetForegroundWindow();
-                var shadedWindow = shadeWindows.SingleOrDefault(w => w.TargetHandle == hwnd);
-                if (shadedWindow != null)
-                {
-                    shadedWindow.Close();
-                    shadeWindows.Remove(shadedWindow);
-                }
-                var opacity = brightnessToOpacity(settings.Brightness);
-                var customShadeCreatedDelegate = new Win32.CustomShadeCreatedEventDelegate(CreatedCustomShadeEventProc);
-                var customShade = new CustomShadeTool(hwnd, customShadeCreatedDelegate);
-                customShade.Show();
-            });
-
-            if (settings.ActiveOnLaunch)
-            {
-                dimOn(curFgHwnd);
+                File.Copy(legacyPath, settingsPath, overwrite: true);
             }
 
-            var eventDelegate = new Win32.WinEventDelegate(WinEventProc);
-            GCSafetyHandleForActive = GCHandle.Alloc(eventDelegate);
-            Win32.SetWinEventHook(Win32.EVENT_SYSTEM_FOREGROUND, Win32.EVENT_SYSTEM_FOREGROUND,
-                                  IntPtr.Zero, eventDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
+            try
+            {
+                return new ConfigurationBuilder<ISettings>().UseJsonFile(settingsPath).Build();
+            }
+            catch (Exception)
+            {
+                // Recover from invalid or malformed settings without crashing.
+                File.WriteAllText(settingsPath, "{}");
+                return new ConfigurationBuilder<ISettings>().UseJsonFile(settingsPath).Build();
+            }
+        }
 
-            var eventClosedDelegate = new Win32.WinEventDelegate(WinCloseEventProc);
-            GCSafetyHandleForClose = GCHandle.Alloc(eventClosedDelegate);
-            Win32.SetWinEventHook(Win32.SWEH_Events.EVENT_OBJECT_DESTROY, Win32.SWEH_Events.EVENT_OBJECT_DESTROY,
-                                  IntPtr.Zero, eventClosedDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
+        private static void NormalizeSettings(ISettings settingsToNormalize)
+        {
+            if (settingsToNormalize.Brightness < 0)
+            {
+                settingsToNormalize.Brightness = 0;
+            }
+            else if (settingsToNormalize.Brightness > 100)
+            {
+                settingsToNormalize.Brightness = 100;
+            }
+        }
+
+        private void App_Startup(object sender, StartupEventArgs e)
+        {
+            try
+            {
+                curFgHwnd = Win32.GetForegroundWindow();
+
+                var iconController = new NotifyIconController(settings);
+                notifyIcon = iconController.NotifyIcon;
+                iconController.ExitClicked += () => Shutdown();
+                Exit += (e, s) =>
+                {
+                    iconController.NotifyIcon.Visible = false;
+                    iconController.NotifyIcon.Icon?.Dispose();
+                    iconController.NotifyIcon.Dispose();
+                };
+
+                RegisterHotkeySafe("PowerDimmerHotkey", Key.D, ModifierKeys.Windows | ModifierKeys.Control | ModifierKeys.Alt, true, (s, e) =>
+                {
+                    settings.DimmingEnabled = !settings.DimmingEnabled;
+                });
+
+                RegisterHotkeySafe("DimToggleHotkey", Key.D, ModifierKeys.Windows | ModifierKeys.Shift, true, (s, e) =>
+                {
+                    if (!settings.DimmingEnabled)
+                    {
+                        return;
+                    }
+
+                    var hwnd = Win32.GetForegroundWindow();
+                    if (pinnedHandles.Contains(hwnd))
+                    {
+                        pinnedHandles.Remove(hwnd);
+                    }
+                    else
+                    {
+                        pinnedHandles.Add(hwnd);
+                    }
+                });
+
+                RegisterHotkeySafe("ShadeToggleHotkey", Key.S, ModifierKeys.Windows | ModifierKeys.Alt, true, (s, e) =>
+                {
+                    if (!settings.WindowShadeEnabled)
+                    {
+                        return;
+                    }
+
+                    //unshade window if exists
+                    var hwnd = Win32.GetForegroundWindow();
+                    var shadedWindow = shadeWindows.SingleOrDefault(w => w.TargetHandle == hwnd);
+                    if (shadedWindow != null)
+                    {
+                        shadedWindow.Close();
+                        shadeWindows.Remove(shadedWindow);
+                    }
+                    else
+                    {
+                        var opacity = brightnessToOpacity(settings.Brightness);
+                        var shade = new WindowShade(hwnd)
+                        {
+                            Opacity = opacity
+                        };
+                        shade.Show();
+                        shadeWindows.Add(shade);
+                    }
+                });
+
+                RegisterHotkeySafe("CustomShadeHotkey", Key.A, ModifierKeys.Windows | ModifierKeys.Alt, true, (s, e) =>
+                {
+                    if (!settings.WindowShadeEnabled)
+                    {
+                        return;
+                    }
+
+                    var hwnd = Win32.GetForegroundWindow();
+                    var shadedWindow = shadeWindows.SingleOrDefault(w => w.TargetHandle == hwnd);
+                    if (shadedWindow != null)
+                    {
+                        shadedWindow.Close();
+                        shadeWindows.Remove(shadedWindow);
+                    }
+                    var opacity = brightnessToOpacity(settings.Brightness);
+                    var customShadeCreatedDelegate = new Win32.CustomShadeCreatedEventDelegate(CreatedCustomShadeEventProc);
+                    var customShade = new CustomShadeTool(hwnd, customShadeCreatedDelegate);
+                    customShade.Show();
+                });
+
+                if (settings.ActiveOnLaunch)
+                {
+                    dimOn(curFgHwnd);
+                }
+
+                var eventDelegate = new Win32.WinEventDelegate(WinEventProc);
+                GCSafetyHandleForActive = GCHandle.Alloc(eventDelegate);
+                Win32.SetWinEventHook(Win32.EVENT_SYSTEM_FOREGROUND, Win32.EVENT_SYSTEM_FOREGROUND,
+                                      IntPtr.Zero, eventDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
+
+                var eventClosedDelegate = new Win32.WinEventDelegate(WinCloseEventProc);
+                GCSafetyHandleForClose = GCHandle.Alloc(eventClosedDelegate);
+                Win32.SetWinEventHook(Win32.SWEH_Events.EVENT_OBJECT_DESTROY, Win32.SWEH_Events.EVENT_OBJECT_DESTROY,
+                                      IntPtr.Zero, eventClosedDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
+            }
+            catch (Exception ex)
+            {
+                WriteCrashLog(ex, "App_Startup");
+                Shutdown();
+            }
+        }
+
+        private void RegisterHotkeySafe(string name, Key key, ModifierKeys modifiers, bool noRepeat, EventHandler<HotkeyEventArgs> handler)
+        {
+            try
+            {
+                HotkeyManager.Current.AddOrReplace(name, key, modifiers, noRepeat, handler);
+            }
+            catch (HotkeyAlreadyRegisteredException ex)
+            {
+                WriteCrashLog(ex, $"HotkeyRegistration:{name}");
+                ShowHotkeyConflict(key, modifiers);
+            }
+            catch (Exception ex)
+            {
+                WriteCrashLog(ex, $"HotkeyRegistration:{name}");
+            }
+        }
+
+        private void ShowHotkeyConflict(Key key, ModifierKeys modifiers)
+        {
+            if (notifyIcon == null)
+            {
+                return;
+            }
+
+            notifyIcon.BalloonTipTitle = "PowerDimmer hotkey conflict";
+            notifyIcon.BalloonTipText =
+                $"{FormatHotkey(modifiers, key)} is already registered by another app. " +
+                "PowerDimmer will continue without that hotkey.";
+            notifyIcon.ShowBalloonTip(5000);
+        }
+
+        private static string FormatHotkey(ModifierKeys modifiers, Key key)
+        {
+            var parts = new List<string>();
+            if (modifiers.HasFlag(ModifierKeys.Control)) parts.Add("Ctrl");
+            if (modifiers.HasFlag(ModifierKeys.Shift)) parts.Add("Shift");
+            if (modifiers.HasFlag(ModifierKeys.Alt)) parts.Add("Alt");
+            if (modifiers.HasFlag(ModifierKeys.Windows)) parts.Add("Win");
+            parts.Add(key.ToString());
+            return string.Join("+", parts);
         }
 
         private void dimOn(IntPtr fgHwnd)//creates a dim window on each screen
@@ -191,7 +339,7 @@ namespace PowerDimmer
             if (settings.WindowShadeEnabled)
             {
                 var whwnd = Win32.GetForegroundWindow();
-                WindowShade windowShade = shadeWindows.SingleOrDefault(s => s.TargetHandle == whwnd);
+                var windowShade = shadeWindows.SingleOrDefault(s => s.TargetHandle == whwnd);
                 if (windowShade != null)
                 {
                     UpdateShade(whwnd, windowShade);
@@ -202,7 +350,7 @@ namespace PowerDimmer
         {
             if (settings.WindowShadeEnabled)
             {
-                WindowShade windowShade = shadeWindows.SingleOrDefault(s => s.TargetHandle == hwnd);
+                var windowShade = shadeWindows.SingleOrDefault(s => s.TargetHandle == hwnd);
                 if(windowShade != null)
                 {
                     windowShade.Close();

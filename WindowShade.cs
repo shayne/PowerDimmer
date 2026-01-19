@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -16,7 +16,7 @@ namespace PowerDimmer
     {
         public IntPtr Handle;
         IntPtr _targetHandle;
-        static Win32.WinEventDelegate eventMovedDelegate = null;
+        private static Win32.WinEventDelegate? eventMovedDelegate;
         private Win32.RECT rect;
         static GCHandle GCSafetyHandle;
         private IntPtr eventHook;
@@ -39,8 +39,9 @@ namespace PowerDimmer
 
             //Allocating the delegate to a GCHandle example from here. This prevents it from getting garbage collected and windows throwing a message error.
             //https://stackoverflow.com/questions/48767318/move-window-when-external-applications-window-moves
-            eventMovedDelegate = new Win32.WinEventDelegate(WinEventMovedProc);
-            GCSafetyHandle = GCHandle.Alloc(eventMovedDelegate);
+            var movedDelegate = new Win32.WinEventDelegate(WinEventMovedProc);
+            eventMovedDelegate = movedDelegate;
+            GCSafetyHandle = GCHandle.Alloc(movedDelegate);
 
             if (_targetHandle != IntPtr.Zero)
             {
@@ -75,8 +76,9 @@ namespace PowerDimmer
             
             isLocalPos = true;
 
-            eventMovedDelegate = new Win32.WinEventDelegate(WinEventMovedProc);
-            GCSafetyHandle = GCHandle.Alloc(eventMovedDelegate);
+            var movedDelegate = new Win32.WinEventDelegate(WinEventMovedProc);
+            eventMovedDelegate = movedDelegate;
+            GCSafetyHandle = GCHandle.Alloc(movedDelegate);
 
             if (_targetHandle != IntPtr.Zero)
             {
