@@ -16,7 +16,7 @@ namespace PowerDimmer
     {
         public IntPtr Handle;
         IntPtr _targetHandle;
-        static Win32.WinEventDelegate eventMovedDelegate = null;
+        static Win32.WinEventDelegate? eventMovedDelegate;
         private Win32.RECT rect;
         static GCHandle GCSafetyHandle;
         private IntPtr eventHook;
