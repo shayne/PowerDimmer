@@ -4,7 +4,6 @@ using System.Windows.Forms;
 
 using ModernNotifyIcon.Theme;
 using System.Collections.Generic;
-using System.Reflection;
 
 namespace PowerDimmer
 {
@@ -48,7 +47,7 @@ namespace PowerDimmer
                     .AddButton(option => option
                         .SetText("E&xit")
                         .AddHandler(() => ExitClicked?.Invoke())))
-                .Build(Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location)!);
+                .Build(Icon.ExtractAssociatedIcon(Environment.ProcessPath)!);
 
             NotifyIcon.Text = "PowerDimmer";
             NotifyIcon.Visible = true;

@@ -26,7 +26,21 @@ New features
 
 ## Building
 
-Just install the [.NET 6.0 SDK](https://dotnet.microsoft.com/en-us/download) and then `dotnet run` 
+Install the [.NET 8 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) and run:
+
+```powershell
+dotnet run
+```
+
+## Standalone Release
+
+Create a self-contained 64-bit Windows release with:
+
+```powershell
+dotnet publish -c Release
+```
+
+The output is in `bin\Release\net8.0-windows10.0.19041.0\win-x64\publish`. Distribute the complete contents of that folder. It includes the required .NET runtime, so users do not need to install one separately.
 
 ## Context
 
