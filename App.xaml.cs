@@ -56,7 +56,7 @@ namespace PowerDimmer
             Exit += (e, s) =>
             {
                 iconController.NotifyIcon.Visible = false;
-                iconController.NotifyIcon.Icon.Dispose();
+                iconController.NotifyIcon.Icon?.Dispose();
                 iconController.NotifyIcon.Dispose();
             };
 
@@ -191,7 +191,7 @@ namespace PowerDimmer
             if (settings.WindowShadeEnabled)
             {
                 var whwnd = Win32.GetForegroundWindow();
-                WindowShade windowShade = shadeWindows.SingleOrDefault(s => s.TargetHandle == whwnd);
+                WindowShade? windowShade = shadeWindows.SingleOrDefault(s => s.TargetHandle == whwnd);
                 if (windowShade != null)
                 {
                     UpdateShade(whwnd, windowShade);
@@ -202,7 +202,7 @@ namespace PowerDimmer
         {
             if (settings.WindowShadeEnabled)
             {
-                WindowShade windowShade = shadeWindows.SingleOrDefault(s => s.TargetHandle == hwnd);
+                WindowShade? windowShade = shadeWindows.SingleOrDefault(s => s.TargetHandle == hwnd);
                 if(windowShade != null)
                 {
                     windowShade.Close();
