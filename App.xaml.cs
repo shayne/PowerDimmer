@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using Config.Net;
+using NHotkey;
 using NHotkey.Wpf;
 
 namespace PowerDimmer
@@ -60,12 +61,12 @@ namespace PowerDimmer
                 iconController.NotifyIcon.Dispose();
             };
 
-            HotkeyManager.Current.AddOrReplace("PowerDimmerHotkey", Key.D, ModifierKeys.Windows | ModifierKeys.Control | ModifierKeys.Alt, true, (s, e) =>
+            TryRegisterHotkey(iconController, "PowerDimmerHotkey", settings.HotkeyPowerDimmerToggle, (s, e) =>
             {
                 settings.DimmingEnabled = !settings.DimmingEnabled;
             });
 
-            HotkeyManager.Current.AddOrReplace("DimToggleHotkey", Key.D, ModifierKeys.Windows | ModifierKeys.Shift, true, (s, e) =>
+            TryRegisterHotkey(iconController, "DimToggleHotkey", settings.HotkeyPinToggle, (s, e) =>
             {
                 if (!settings.DimmingEnabled)
                 {
@@ -83,7 +84,7 @@ namespace PowerDimmer
                 }
             });
 
-            HotkeyManager.Current.AddOrReplace("ShadeToggleHotkey", Key.S, ModifierKeys.Windows | ModifierKeys.Alt, true, (s, e) =>
+            TryRegisterHotkey(iconController, "ShadeToggleHotkey", settings.HotkeyShadeToggle, (s, e) =>
             {
                 if (!settings.WindowShadeEnabled)
                 {
@@ -110,7 +111,7 @@ namespace PowerDimmer
                 }
             });
 
-            HotkeyManager.Current.AddOrReplace("CustomShadeHotkey", Key.A, ModifierKeys.Windows | ModifierKeys.Alt, true, (s, e) =>
+            TryRegisterHotkey(iconController, "CustomShadeHotkey", settings.HotkeyCustomShade, (s, e) =>
             {
                 if (!settings.WindowShadeEnabled)
                 {
@@ -144,6 +145,67 @@ namespace PowerDimmer
             GCSafetyHandleForClose = GCHandle.Alloc(eventClosedDelegate);
             Win32.SetWinEventHook(Win32.SWEH_Events.EVENT_OBJECT_DESTROY, Win32.SWEH_Events.EVENT_OBJECT_DESTROY,
                                   IntPtr.Zero, eventClosedDelegate, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
+        }
+
+        // Registers a hotkey defined in settings (e.g. "Ctrl+Win+Alt+D"), skipping and warning instead of crashing if it's invalid or already claimed by another app.
+        private void TryRegisterHotkey(NotifyIconController iconController, string name, string hotkeyString, EventHandler<HotkeyEventArgs> handler)
+        {
+            if (!TryParseHotkey(hotkeyString, out var key, out var modifiers))
+            {
+                iconController.NotifyIcon.ShowBalloonTip(5000, "PowerDimmer", $"Invalid shortcut \"{hotkeyString}\" in settings.json for {name}. That action has no shortcut until it's fixed.", System.Windows.Forms.ToolTipIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                HotkeyManager.Current.AddOrReplace(name, key, modifiers, true, handler);
+            }
+            catch (HotkeyAlreadyRegisteredException)
+            {
+                iconController.NotifyIcon.ShowBalloonTip(5000, "PowerDimmer", $"Shortcut \"{hotkeyString}\" for {name} is already in use by another app. Change it in settings.json and restart PowerDimmer.", System.Windows.Forms.ToolTipIcon.Warning);
+            }
+        }
+
+        private static bool TryParseHotkey(string hotkeyString, out Key key, out ModifierKeys modifiers)
+        {
+            key = Key.None;
+            modifiers = ModifierKeys.None;
+
+            if (string.IsNullOrWhiteSpace(hotkeyString))
+            {
+                return false;
+            }
+
+            var parts = hotkeyString.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length == 0 || !Enum.TryParse(parts[^1], true, out key))
+            {
+                return false;
+            }
+
+            foreach (var part in parts[..^1])
+            {
+                switch (part.ToLowerInvariant())
+                {
+                    case "ctrl":
+                    case "control":
+                        modifiers |= ModifierKeys.Control;
+                        break;
+                    case "alt":
+                        modifiers |= ModifierKeys.Alt;
+                        break;
+                    case "shift":
+                        modifiers |= ModifierKeys.Shift;
+                        break;
+                    case "win":
+                    case "windows":
+                        modifiers |= ModifierKeys.Windows;
+                        break;
+                    default:
+                        return false;
+                }
+            }
+
+            return true;
         }
 
         private void dimOn(IntPtr fgHwnd)//creates a dim window on each screen
@@ -312,5 +374,17 @@ namespace PowerDimmer
 
         [Option(Alias = "windowShadeEnabled", DefaultValue = true)]
         bool WindowShadeEnabled { get; set; }
+
+        [Option(Alias = "hotkeyPowerDimmerToggle", DefaultValue = "Ctrl+Win+Alt+D")]
+        string HotkeyPowerDimmerToggle { get; set; }
+
+        [Option(Alias = "hotkeyPinToggle", DefaultValue = "Win+Shift+D")]
+        string HotkeyPinToggle { get; set; }
+
+        [Option(Alias = "hotkeyShadeToggle", DefaultValue = "Win+Alt+S")]
+        string HotkeyShadeToggle { get; set; }
+
+        [Option(Alias = "hotkeyCustomShade", DefaultValue = "Win+Alt+A")]
+        string HotkeyCustomShade { get; set; }
     }
 }
